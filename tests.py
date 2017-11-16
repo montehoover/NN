@@ -14,3 +14,4 @@ class TestSigmoid(TestCase):
         self.assertAlmostEqual(sigmoid(2), 0.880797, places=5)
         self.assertAlmostEqual(sigmoid(100), 1.0, places=5)
         self.assertAlmostEqual(sigmoid(80000), 1.0, places=5)
+
