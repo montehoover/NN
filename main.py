@@ -2,15 +2,19 @@ import struct
 import numpy as np
 import pickle
 
+import time
+
 DIGITS = 10
-HIDDEN_UNITS = 50
+HIDDEN_UNITS = 10
 # IMAGES = LABELS = 60000
 # COMPONENTS = 50
 LRN_RATE = 0.1
+ALPHA = 0.1
+GAMMA = 0.1
 MINI_BATCH = 10
-EPOCHS = 6
+EPOCHS = 1
 
-PICKLE = "nn5.pickle"
+PICKLE = "nn6.pickle"
 
 
 def main():
@@ -19,6 +23,8 @@ def main():
 
 
 def train_nn():
+    print("Starting training...")
+    start = time.time()
     with open('MNIST_PCA/train-labels.idx1-ubyte', 'rb') as f:
         magic_number = f.read(4)
         num_labels_bytes = f.read(4)
@@ -43,8 +49,12 @@ def train_nn():
     with open(PICKLE, 'wb') as f:
         pickle.dump(nn, f)
 
+    print("Finished training in {} seconds".format(time.time() - start))
+
 
 def test_nn():
+    print("Starting testing...")
+    start = time.time()
     with open('MNIST_PCA/t10k-labels.idx1-ubyte', 'rb') as f:
         magic_number = f.read(4)
         num_labels_bytes = f.read(4)
@@ -75,25 +85,24 @@ def test_nn():
             errors += 1
     print(errors / num_images)
 
+    print("Finished testing in {} seconds".format(time.time() - start))
+
 
 
 class NN():
     def __init__(self, num_input: int, num_output: int, num_hidden: int):
         # Weights from network input to hidden layer units; each row in matrix corresponds to weights for a single unit
-        self.w_hn = np.random.uniform(-0.05, 0.05, (num_hidden, num_input + 1))
+        self.wh = np.random.uniform(-0.05, 0.05, (num_hidden, num_input + 1))
         # Weights from hidden layer to output layer units; each row in matrix corresponds to weights for a single unit
-        self.w_kh = np.random.uniform(-0.05, 0.05, (num_output, num_hidden + 1))
+        self.wk = np.random.uniform(-0.05, 0.05, (num_output, num_hidden + 1))
 
 
     def backprop(self, examples: np.ndarray, labels: np.ndarray) -> None:
         for y in range(EPOCHS):
-            batch_of_xhs = []
-            batch_of_xks = []
-            batch_of_dhs = []
-            batch_of_dks = []
+            batch_of_dwhs = np.empty((*self.wh.shape, 0))
+            batch_of_dwks = np.empty((*self.wk.shape, 0))
             # Run one epoch
             for z in range(len(examples)):
-
                 # Propogate input values through
                 o_h_vector = self.get_h_layer_output(examples[z])
                 o_k_vector = self.get_k_layer_output(o_h_vector)
@@ -104,60 +113,29 @@ class NN():
                 # Propogate errors back
                 delta_ks = [self.delta_k(o_k, labels[z][i]) for i, o_k in enumerate(o_k_vector)]
                 # To calculate delta_h, we need vector of weights that go from that h-unit to each output unit
-                delta_hs = [self.delta_h(o_h, self.w_kh[:, i], delta_ks) for i, o_h in enumerate(o_h_vector)]
+                delta_hs = [self.delta_h(o_h, self.wk[:, i], delta_ks) for i, o_h in enumerate(o_h_vector)]
 
-                # Collect errors and values for mini-batch
-                # Each is a list of lists, where each list is a row appended to the matrix. The rows in the matrix are
-                # values corresponding to a single training example (50 values for a single image, HIDDEN_UNITS # of o_h
-                # outputs, HIDDEN_UNITS # of delta_hs, and 10 delta_ks for each of the 10 k-layer outputs).
-                batch_of_xhs.append(examples[z])
-                batch_of_xks.append(o_h_vector)
-                batch_of_dhs.append(delta_hs) # matrix where the rows are for each of the hidden units, and the columns are for all 10 of the batch for the same hidden unit
-                batch_of_dks.append(delta_ks)
+                # Add 1.0 as first element in x vector to be paired with w_0
+                xs = np.insert(examples[z], 0, 1.0)
+                o_h_vector = np.insert(o_h_vector, 0, 1.0)
+                # Turn into horizontal vector and vertical vectors in preparation for element-wise multiplication into matrices
+                xs = xs.reshape(1, *xs.shape)
+                o_h_vector = np.array(o_h_vector).reshape(1, len(o_h_vector))
+                delta_ks = np.array(delta_ks).reshape(len(delta_ks), 1)
+                delta_hs = np.array(delta_hs).reshape(len(delta_hs), 1)
+
+                dwh = LRN_RATE * (delta_hs * xs)
+                np.append(batch_of_dwhs, dwh.reshape(*dwh.shape, 1), axis=2)
+
+                dwk = LRN_RATE * (delta_ks * o_h_vector)
+                np.append(batch_of_dwks, dwk.reshape(*dwk.shape, 1), axis=2)
+
 
                 # If we have finished collecting errors for a mini-batch, update the weights according to gradient descent
                 if (z + 1) % MINI_BATCH == 0:
-                    # turn lists of lists into matrices:
-                    batch_of_xhs = np.array(batch_of_xhs)
-                    batch_of_xks = np.array(batch_of_xks)
-                    batch_of_dhs = np.array(batch_of_dhs)
-                    batch_of_dks = np.array(batch_of_dks)
-
-                    # for each set of 50 weights going to HIDDEN_UNITS # of units (say 5 or 10)
-                    for j, weights in enumerate(self.w_hn):
-                        # for each of the 50 weights in that set
-                        for i, weight in enumerate(weights):
-                            if i == 0:
-                                # to get paired with w_0
-                                x_ji_vector = np.ones((MINI_BATCH,1))
-                            else:
-                                # use -1 because there are 50 x's in each example, and 51 weights because of w_0
-                                x_ji_vector = batch_of_xhs[:, i-1]
-                            # Update all 50 weights for each hidden unit, then update all 50 for the next one, etc.
-                            # here delta_hs[j] stays the same and x_ji keeps changing
-                            # for a mini batch, we want the x_ji from the first ten examples: so x_ji from example1 through
-                            # example10, and we want delta_h for that hidden unit for the first ten examples.
-                            # So we should have a dot-product of two 10-item vectors here. If we have delta_h's in a list
-                            # for all 5 hidden units, and append those lists as rows in a matrix, then we can get that
-                            # 10-item vector by taking the columns of that matrix.
-                            weights[i] = weights[i] + self.delta_w(batch_of_dhs[:, j], x_ji_vector)
-
-                    # for each set of HIDDEN_UNITS # of weights going to the 10 outputs
-                    for j, weights in enumerate(self.w_kh):
-                        # for each of the HIDDEN_UNITS # of weights (say 5 or 10)
-                        for i, weight in enumerate(weights):
-                            if i == 0:
-                                x_ji_vector = np.ones((MINI_BATCH,1))
-                            else:
-                                x_ji_vector = batch_of_xks[:, i-1]
-                            # Update the 5 weights for each output unit, then update all 5 for the next one, etc.
-                            weights[i] = weights[i] + self.delta_w(batch_of_dks[:, j], x_ji_vector)
-
-                    # Clear the contents of these matrices so they're ready for the next mini-batch
-                    batch_of_xhs = []
-                    batch_of_xks = []
-                    batch_of_dhs = []
-                    batch_of_dks = []
+                    # Sum the corresponding weights for the batch; axis 2 holds each weight matrix as a slice
+                    self.wh = self.wh + batch_of_dwhs.sum(axis=2)
+                    self.wk = self.wk + batch_of_dwks.sum(axis=2)
 
 
     def classify(self, x):
@@ -192,7 +170,7 @@ class NN():
         :param x:
         :return: vector of all hidden layer output values
         """
-        return [self.sigmoid_unit_output(w, x) for w in self.w_hn]
+        return [self.sigmoid_unit_output(w, x) for w in self.wh]
 
     def get_k_layer_output(self, x: np.ndarray) -> np.ndarray:
         """
@@ -202,7 +180,7 @@ class NN():
         :param x:
         :return: vector of all values from the k-layer output units
         """
-        return [self.sigmoid_unit_output(w, x) for w in self.w_kh]
+        return [self.sigmoid_unit_output(w, x) for w in self.wk]
 
     def sigmoid_unit_output(self, w: np.ndarray, x: np.ndarray) -> float:
         # Insert x_0 = 1 to x vector to correspond with w_0
