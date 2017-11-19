@@ -10,14 +10,17 @@ LRN_RATE = 0.1
 # gamma
 # alpha
 MINI_BATCH = 10
-EPOCHS = 3
-PICKLE = "nn7.pickle"
+EPOCHS = 1
+PICKLE = "nn8.pickle"
 
 
 def main():
     nn = None
-    with open(PICKLE, 'rb') as f:
-        nn = pickle.load(f)
+    try:
+        with open(PICKLE, 'rb') as f:
+            nn = pickle.load(f)
+    except:
+        pass
     train_nn(nn)
     # test_nn()
 
