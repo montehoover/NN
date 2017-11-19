@@ -28,11 +28,12 @@ def train_nn():
         num_labels_bytes = f.read(4)
         num_labels = struct.unpack('>i', num_labels_bytes)[0]
         labels_as_ints = np.fromfile(f, dtype=np.uint8)
+        labels = to_one_hot_vector(labels_as_ints)
 
         # Turn labels into one-hot vectors: Create empty matrix where each row is a one-hot vector of length DIGITS
         # For each row, assign at the index of the label digit to 1. (I.e. if first label is 7, labels[0][7] = 1)
-        labels = np.zeros((num_labels, DIGITS), dtype=np.uint8)
-        labels[np.arange(num_labels), labels_as_ints] = 1
+        # labels = np.zeros((num_labels, DIGITS), dtype=np.uint8)
+        # labels[np.arange(num_labels), labels_as_ints] = 1
 
     with open('MNIST_PCA/train-images-pca.idx2-double', 'rb') as f:
         magic_number = f.read(4)
@@ -48,6 +49,7 @@ def train_nn():
         pickle.dump(nn, f)
     print("Finished training in {} seconds".format(time.time() - start))
 
+
 def test_nn():
     print("Starting testing...")
     start = time.time()
@@ -56,11 +58,7 @@ def test_nn():
         num_labels_bytes = f.read(4)
         num_labels = struct.unpack('>i', num_labels_bytes)[0]
         labels_as_ints = np.fromfile(f, dtype=np.uint8)
-
-        # # Turn labels into one-hot vectors: Create empty matrix where each row is a one-hot vector of length DIGITS
-        # # For each row, assign at the index of the label digit to 1. (I.e. if first label is 7, labels[0][7] = 1)
-        # labels = np.zeros((num_labels, DIGITS), dtype=np.uint8)
-        # labels[np.arange(num_labels), labels_as_ints] = 1
+        labels = to_one_hot_vector(labels_as_ints)
 
     with open('MNIST_PCA/t10k-images-pca.idx2-double', 'rb') as f:
         magic_number = f.read(4)
@@ -79,10 +77,47 @@ def test_nn():
         # print(labels_as_ints[i], nn.classify(images[i]))
         if labels_as_ints[i] != nn.classify(images[i]):
             errors += 1
+
+    a = squared_loss()
+    # b = oh_over_one_loss()
     print(errors / num_images)
     print("Finished testing in {} seconds".format(time.time() - start))
 
 
+
+def to_one_hot_vector(x: np.ndarray) -> np.ndarray:
+    """
+    Turn labels into one-hot vectors: Create empty matrix where each row is a one-hot vector of length DIGITS
+    For each row, assign at the index of the label digit to 1. (I.e. if first label is 7, labels[0][7] = 1)
+    :param x: 1D np array
+    :return:  2d np array
+    """
+    one_hot = np.zeros((len(x), DIGITS), dtype=np.uint8)
+    one_hot[np.arange(len(x)), x] = 1
+    return one_hot
+
+
+def squared_loss(nn: object, test_images: np.ndarray, test_labels: np.ndarray) -> float:
+    """
+    :param nn:
+    :param test_images: 2D matrix of images x image features
+    :param test_labels: 2D matrix of labels x one-hot representation
+    """
+    return sum([single_squared_loss(nn, *i_l_tuple) for i_l_tuple in zip(test_images, test_labels)])
+
+def single_squared_loss(nn: object, image_v: np.ndarray, label_onehot: np.ndarray) -> float:
+    """
+    Measurement of NN's classification of an image against a known label
+    :param nn:
+    :param image_v: 1D vector of image features (pixels or PCA, etc.)
+    :param label_onehot: 1D vector (one-hot) labeling matching the image
+    :return: Scalar value that is the Squared Loss for the single image
+    """
+    classified_onehot = nn.get_output(image_v)
+    differences = label_onehot - classified_onehot
+    squares = np.square(differences)
+    sum = np.sum(squares)
+    return sum
 
 
 class NN():
@@ -168,12 +203,22 @@ class NN():
                     batch_of_dks = []
 
 
-    def classify(self, x):
-        o_h_vector = self.get_h_layer_output(x)
-        o_k_vector = self.get_k_layer_output(o_h_vector)
-
-        classified_digit = np.argmax(o_k_vector)
+    def classify(self, x: np.ndarray) -> int:
+        """
+        :param x: 1D vector of input values (from a single image)
+        :return: The NN's classification value of that image
+        """
+        classified_onehot = self.get_output(x)
+        classified_digit = np.argmax(classified_onehot)
         return classified_digit
+
+    def get_output(self, x: np.ndarray) -> np.ndarray:
+        """
+        :param x: 1D vector of input values (from a single image)
+        :return: 1D vector (one-hot) of the NN's classification value of that image
+        """
+        o_h_vector = self.get_h_layer_output(x)
+        return self.get_k_layer_output(o_h_vector)
 
 
     def delta_w(self, delta_j_vector, xji_vector):
@@ -194,11 +239,11 @@ class NN():
 
     def get_h_layer_output(self, x: np.ndarray) -> np.ndarray:
         """
-        Get vector of values from output units.
-        Each hidden layer unit receives the same vector of input values and applies a unique vector of
-        weights to its sigmoid unit calculation
-        :param x:
-        :return: vector of all hidden layer output values
+        Get vector of output values from hidden layer units.
+        Each hidden layer unit receives the same vector of input values (x) and applies a unique vector of
+        weights (w) to its sigmoid unit calculation.
+        :param x: 1D vector of input values (from a single image)
+        :return: 1D vector of hidden layer output values
         """
         return [self.sigmoid_unit_output(w, x) for w in self.w_hn]
 
@@ -213,6 +258,11 @@ class NN():
         return [self.sigmoid_unit_output(w, x) for w in self.w_kh]
 
     def sigmoid_unit_output(self, w: np.ndarray, x: np.ndarray) -> float:
+        """
+        :param w: 1D vector of weights
+        :param x: 1D vector of inputs
+        :return: Scalar value output
+        """
         # Insert x_0 = 1 to x vector to correspond with w_0
         x = np.insert(x, 0, 1)
         net = w.dot(x)
