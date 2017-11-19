@@ -1,80 +1,110 @@
 import struct
 import numpy as np
 import pickle
-
 import time
 
 DIGITS = 10
 HIDDEN_UNITS = 10
-# IMAGES = LABELS = 60000
-# COMPONENTS = 50
 LRN_RATE = 0.1
+# second lrnrate
+# gamma
+# alpha
 MINI_BATCH = 10
-EPOCHS = 1
-
-PICKLE = "nn4.pickle"
+EPOCHS = 3
+PICKLE = "nn7.pickle"
 
 
 def main():
-    # train_nn()
-    test_nn()
+    nn = None
+    with open(PICKLE, 'rb') as f:
+        nn = pickle.load(f)
+    train_nn(nn)
+    # test_nn()
 
 
-def train_nn():
+def train_nn(nn=None):
     print("Starting training...")
     start = time.time()
-    with open('MNIST_PCA/train-labels.idx1-ubyte', 'rb') as f:
-        magic_number = f.read(4)
-        num_labels_bytes = f.read(4)
-        # num_labels = struct.unpack('>i', num_labels_bytes)[0]
-        labels_as_ints = np.fromfile(f, dtype=np.uint8)
-        labels = to_one_hot_vector(labels_as_ints)
+    labels_as_ints = get_labels('MNIST_PCA/train-labels.idx1-ubyte')
+    labels = to_one_hot_vector(labels_as_ints)
+    images, num_components = get_images('MNIST_PCA/train-images-pca.idx2-double')
 
-    with open('MNIST_PCA/train-images-pca.idx2-double', 'rb') as f:
-        magic_number = f.read(4)
-        num_images_bytes = f.read(4)
-        num_components_bytes = f.read(4)
-        num_images = struct.unpack('>i', num_images_bytes)[0]
-        num_components = struct.unpack('>i', num_components_bytes)[0]
-        images = np.fromfile(f, dtype='>d').reshape((num_images, num_components))
-
-    nn = NN(num_components, DIGITS, HIDDEN_UNITS)
+    if not nn:
+        nn = NN(num_components, DIGITS, HIDDEN_UNITS)
     nn.backprop(images, labels)
+
     with open(PICKLE, 'wb') as f:
         pickle.dump(nn, f)
+
     print("Finished training in {:.2f} seconds".format(time.time() - start))
 
 
 def test_nn():
-    print("Starting testing...")
+    # print("Starting testing...")
     start = time.time()
-    with open('MNIST_PCA/t10k-labels.idx1-ubyte', 'rb') as f:
+
+    train_labels_as_ints = get_labels('MNIST_PCA/train-labels.idx1-ubyte')
+    train_labels = to_one_hot_vector(train_labels_as_ints)
+    train_images, num_components = get_images('MNIST_PCA/train-images-pca.idx2-double')
+
+    test_labels_as_ints = get_labels('MNIST_PCA/t10k-labels.idx1-ubyte')
+    test_labels = to_one_hot_vector(test_labels_as_ints)
+    test_images, num_components = get_images('MNIST_PCA/t10k-images-pca.idx2-double')
+
+
+    with open(PICKLE, 'rb') as f:
+        nn = pickle.load(f)
+
+    train_output_onehots = np.apply_along_axis(nn.get_output_vector, 1, train_images)
+    train_mean_sq_loss = squared_loss_over_dataset(train_labels, train_output_onehots) / len(train_labels)
+    train_output_ints = from_one_hot_vector(train_output_onehots)
+    train_err = oh_over_one_loss(train_labels_as_ints, train_output_ints)
+
+    print("Squared Loss on train: {:.3f}".format(train_mean_sq_loss))
+    print("0/1 Loss  on train: {:.3f}".format(train_err))
+
+    with open("log.txt", 'a') as f:
+        f.write("Squared Loss on train: {:.2f}\n".format(train_mean_sq_loss))
+        f.write("0/1 Loss on train: {:.2f}\n".format(train_err))
+
+    test_output_onehots = np.apply_along_axis(nn.get_output_vector, 1, test_images)
+    test_mean_sq_loss = squared_loss_over_dataset(test_labels, test_output_onehots) / len(test_labels)
+    test_output_ints = from_one_hot_vector(test_output_onehots)
+    test_err = oh_over_one_loss(test_labels_as_ints, test_output_ints)
+
+    print("Squared Loss on test: {:.3f}".format(test_mean_sq_loss))
+    print("0/1 Loss on test: {:.3f}".format(test_err))
+
+    with open("log.txt", 'a') as f:
+        f.write("Squared Loss on test: {:.2f}\n".format(test_mean_sq_loss))
+        f.write("0/1 Loss on test: {:.2f}\n".format(test_err))
+
+    # print("Finished testing in {:.2f} seconds".format(time.time() - start))
+
+
+def get_labels(file_name: str) -> np.ndarray:
+    """
+    :return: 1D array of integers
+    """
+    with open(file_name, 'rb') as f:
         magic_number = f.read(4)
         num_labels_bytes = f.read(4)
-        # num_labels = struct.unpack('>i', num_labels_bytes)[0]
         labels_as_ints = np.fromfile(f, dtype=np.uint8)
-        labels = to_one_hot_vector(labels_as_ints)
+        return labels_as_ints
 
-    with open('MNIST_PCA/t10k-images-pca.idx2-double', 'rb') as f:
+def get_images(file_name: str) -> (np.ndarray, int):
+    """
+    :return: tuple[0]: 2D matrix where each row represents an image, and each row contains the components of the image
+             tuple[1]: Number of components for each image (length of each row)
+    """
+    with open(file_name, 'rb') as f:
         magic_number = f.read(4)
         num_images_bytes = f.read(4)
         num_components_bytes = f.read(4)
         num_images = struct.unpack('>i', num_images_bytes)[0]
         num_components = struct.unpack('>i', num_components_bytes)[0]
         images = np.fromfile(f, dtype='>d').reshape((num_images, num_components))
-
-    with open(PICKLE, 'rb') as f:
-        nn = pickle.load(f)
-
-    output_onehots = np.apply_along_axis(nn.get_output_vector, 1, images)
-    sq_loss = squared_loss_over_dataset(labels, output_onehots)
-    output_ints = from_one_hot_vector(output_onehots)
-    err = oh_over_one_loss(labels_as_ints, output_ints)
-    print("{:.2f}".format(sq_loss))
-    print("{:.2f}".format(err))
-    print("Finished testing in {:.2f} seconds".format(time.time() - start))
-
-
+        return images, num_components
 
 def to_one_hot_vector(x: np.ndarray) -> np.ndarray:
     """
@@ -87,7 +117,6 @@ def to_one_hot_vector(x: np.ndarray) -> np.ndarray:
     one_hot[np.arange(len(x)), x] = 1
     return one_hot
 
-
 def from_one_hot_vector(X: np.ndarray) -> np.ndarray:
     """
     :param X: 2D matrix where each row is a one-hot vector
@@ -95,7 +124,6 @@ def from_one_hot_vector(X: np.ndarray) -> np.ndarray:
     """
     values = np.apply_along_axis(np.argmax, 1, X)
     return values
-
 
 def oh_over_one_loss(labels: np.ndarray, outputs: np.ndarray) -> float:
     """
@@ -110,7 +138,6 @@ def oh_over_one_loss(labels: np.ndarray, outputs: np.ndarray) -> float:
     accuracy = correct / len(labels)
     return 1 - accuracy
 
-
 def squared_loss_over_dataset(A: np.ndarray, B: np.ndarray) -> float:
     """
     Sum of squared_losses over a series of vectors to compare, divided by two
@@ -119,7 +146,6 @@ def squared_loss_over_dataset(A: np.ndarray, B: np.ndarray) -> float:
     :return: Sum of all squared losses computed over the rows, divided by two
     """
     return sum([single_squared_loss(rowa, rowb) for rowa, rowb in zip(A,B)]) * 0.5
-
 
 def single_squared_loss(a: np.ndarray, b: np.ndarray) -> float:
     """
@@ -139,7 +165,6 @@ class NN():
         # Weights from hidden layer to output layer units; each row in matrix corresponds to weights for a single unit
         self.w_kh = np.random.uniform(-0.05, 0.05, (num_output, num_hidden + 1))
 
-
     def backprop(self, examples: np.ndarray, labels: np.ndarray) -> None:
         for y in range(EPOCHS):
             batch_of_xhs = []
@@ -153,8 +178,8 @@ class NN():
                 o_h_vector = self.get_h_layer_output(examples[z])
                 o_k_vector = self.get_k_layer_output(o_h_vector)
 
-                if z % 1000 == 0:
-                    print(z, o_k_vector)
+                # if z % 1000 == 0:
+                #     print(z, o_k_vector)
 
                 # Propogate errors back
                 delta_ks = [self.delta_k(o_k, labels[z][i]) for i, o_k in enumerate(o_k_vector)]
@@ -214,15 +239,14 @@ class NN():
                     batch_of_dhs = []
                     batch_of_dks = []
 
+                if (z + 1) % (len(examples) / 2) == 0:
+                    with open(PICKLE, 'wb') as f:
+                        pickle.dump(self, f)
+                    with open("log.txt", 'a') as f:
+                        f.write("\n{}-{}, Epoch {}, Image {}:\n".format(HIDDEN_UNITS, MINI_BATCH, y+1, z+1))
+                        print("\n{}-{}, Epoch {}, Image {}:\n".format(HIDDEN_UNITS, MINI_BATCH, y+1, z+1), end='')
+                    test_nn()
 
-    # def classify(self, x: np.ndarray) -> int:
-    #     """
-    #     :param x: 1D vector of input values (from a single image)
-    #     :return: The NN's classification value of that image
-    #     """
-    #     classified_onehot = self.get_output_vector(x)
-    #     classified_digit = np.argmax(classified_onehot)
-    #     return classified_digit
 
     def get_output_vector(self, x: np.ndarray) -> np.ndarray:
         """
@@ -231,7 +255,6 @@ class NN():
         """
         o_h_vector = self.get_h_layer_output(x)
         return self.get_k_layer_output(o_h_vector)
-
 
     def delta_w(self, delta_j_vector, xji_vector):
         return LRN_RATE * delta_j_vector.dot(xji_vector)
@@ -286,6 +309,7 @@ class NN():
         elif x < -650:
             x = -650
         return 1 / (1 + np.exp(-x))
+
 
 if __name__ == '__main__':
     main()
