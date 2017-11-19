@@ -1,4 +1,5 @@
 import struct
+import math
 import numpy as np
 import pickle
 import time
@@ -11,16 +12,16 @@ LRN_RATE = 0.1
 # alpha
 MINI_BATCH = 10
 EPOCHS = 1
-PICKLE = "nn8.pickle"
+PICKLE = "nn9.pickle"
 
 
 def main():
     nn = None
-    try:
-        with open(PICKLE, 'rb') as f:
-            nn = pickle.load(f)
-    except:
-        pass
+    # try:
+    #     with open(PICKLE, 'rb') as f:
+    #         nn = pickle.load(f)
+    # except:
+    #     pass
     train_nn(nn)
     # test_nn()
 
@@ -160,13 +161,28 @@ def single_squared_loss(a: np.ndarray, b: np.ndarray) -> float:
     sum = np.sum(np.square(a - b))
     return sum
 
+def sigmoid_unit_output(w: np.ndarray, x: np.ndarray) -> float:
+    """
+    :param w: 1D vector of weights
+    :param x: 1D vector of inputs
+    :return: Scalar value output
+    """
+    # x = np.insert(x, 0, 1)
+    net = w.dot(x)
+    return sigmoid(net)
+
+def sigmoid(x: float) -> float:
+    if x < -650:
+        x = -650
+    return 1 / (1 + math.exp(-x))
 
 class NN():
     def __init__(self, num_input: int, num_output: int, num_hidden: int):
+        rand_generator = np.random.RandomState(1)
         # Weights from network input to hidden layer units; each row in matrix corresponds to weights for a single unit
-        self.w_hn = np.random.uniform(-0.05, 0.05, (num_hidden, num_input + 1))
+        self.w_hn = rand_generator.uniform(-0.05, 0.05, (num_hidden, num_input + 1))
         # Weights from hidden layer to output layer units; each row in matrix corresponds to weights for a single unit
-        self.w_kh = np.random.uniform(-0.05, 0.05, (num_output, num_hidden + 1))
+        self.w_kh = rand_generator.uniform(-0.05, 0.05, (num_output, num_hidden + 1))
 
     def backprop(self, examples: np.ndarray, labels: np.ndarray) -> None:
         for y in range(EPOCHS):
@@ -210,8 +226,8 @@ class NN():
                     for j, weights in enumerate(self.w_hn):
                         # for each of the 50 weights in that set
                         for i, weight in enumerate(weights):
-                            if i == 0:
-                                # to get paired with w_0
+                            if i == len(weights):
+                                # to get paired with w_0 (which is actually last)
                                 x_ji_vector = np.ones((MINI_BATCH,1))
                             else:
                                 # use -1 because there are 50 x's in each example, and 51 weights because of w_0
@@ -229,8 +245,9 @@ class NN():
                     for j, weights in enumerate(self.w_kh):
                         # for each of the HIDDEN_UNITS # of weights (say 5 or 10)
                         for i, weight in enumerate(weights):
-                            if i == 0:
-                                x_ji_vector = np.ones((MINI_BATCH,1))
+                            if i == len(weights):
+                                # to get paired with w_0 (which is actually last)
+                                x_ji_vector = np.ones((MINI_BATCH, 1))
                             else:
                                 x_ji_vector = batch_of_xks[:, i-1]
                             # Update the 5 weights for each output unit, then update all 5 for the next one, etc.
@@ -267,7 +284,6 @@ class NN():
 
     def delta_h(self, o_h: float, w_kh_vector: np.ndarray, delta_ks: np.ndarray) -> float:
         """
-
         :param o_h:
         :param w_kh_vector: vector of all weights from single hidden unit to each output unit, k
         :param delta_ks:
@@ -283,7 +299,9 @@ class NN():
         :param x: 1D vector of input values (from a single image)
         :return: 1D vector of hidden layer output values
         """
-        return [self.sigmoid_unit_output(w, x) for w in self.w_hn]
+        # Append x_0 = 1 to x vector to correspond with w_0 (which we treat as last item in vector)
+        x = np.append(x, 1)
+        return [sigmoid_unit_output(w, x) for w in self.w_hn]
 
     def get_k_layer_output(self, x: np.ndarray) -> np.ndarray:
         """
@@ -293,25 +311,9 @@ class NN():
         :param x:
         :return: vector of all values from the k-layer output units
         """
-        return [self.sigmoid_unit_output(w, x) for w in self.w_kh]
-
-    def sigmoid_unit_output(self, w: np.ndarray, x: np.ndarray) -> float:
-        """
-        :param w: 1D vector of weights
-        :param x: 1D vector of inputs
-        :return: Scalar value output
-        """
-        # Insert x_0 = 1 to x vector to correspond with w_0
-        x = np.insert(x, 0, 1)
-        net = w.dot(x)
-        return self.sigmoid(net)
-
-    def sigmoid(self, x: float) -> float:
-        if x > 650:
-            x = 650
-        elif x < -650:
-            x = -650
-        return 1 / (1 + np.exp(-x))
+        # Append x_0 = 1 to x vector to correspond with w_0 (which we treat as last item in vector)
+        x = np.append(x, 1)
+        return [sigmoid_unit_output(w, x) for w in self.w_kh]
 
 
 if __name__ == '__main__':
