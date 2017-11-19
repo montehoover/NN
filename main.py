@@ -6,7 +6,9 @@ import time
 
 DIGITS = 10
 HIDDEN_UNITS = 10
-LRN_RATE = 0.1
+H_LRN_RATE = 0.03
+K_LRN_RATE = 0.03
+ALPHA = 0.1
 # second lrnrate
 # gamma
 # alpha
@@ -17,11 +19,11 @@ PICKLE = "nn9.pickle"
 
 def main():
     nn = None
-    # try:
-    #     with open(PICKLE, 'rb') as f:
-    #         nn = pickle.load(f)
-    # except:
-    #     pass
+    try:
+        with open(PICKLE, 'rb') as f:
+            nn = pickle.load(f)
+    except:
+        pass
     train_nn(nn)
     # test_nn()
 
@@ -180,14 +182,14 @@ def sigmoid(x: float) -> float:
 
 class NN():
     def __init__(self, num_input: int, num_output: int, num_hidden: int):
-        rand_generator = np.random.RandomState()
+        rand_generator = np.random.RandomState(12345)
         # Weights from network input to hidden layer units; each row in matrix corresponds to weights for a single unit
         self.w_hn = rand_generator.uniform(-0.05, 0.05, (num_hidden, num_input + 1))
         # Weights from hidden layer to output layer units; each row in matrix corresponds to weights for a single unit
         self.w_kh = rand_generator.uniform(-0.05, 0.05, (num_output, num_hidden + 1))
         # storage of delta_w's for use in momentum
-        self.delta_w_hn = np.zeros(num_input + 1)
-        self.delta_w_kh = np.zeros(num_hidden + 1)
+        self.d_wh = 0
+        self.d_wk = 0
 
     def backprop(self, examples: np.ndarray, labels: np.ndarray) -> None:
         for y in range(EPOCHS):
@@ -244,7 +246,7 @@ class NN():
                             # So we should have a dot-product of two 10-item vectors here. If we have delta_h's in a list
                             # for all 5 hidden units, and append those lists as rows in a matrix, then we can get that
                             # 10-item vector by taking the columns of that matrix.
-                            weights[i] = weights[i] + self.delta_w(batch_of_dhs[:, j], x_ji_vector)
+                            weights[i] = weights[i] + self.delta_wh(batch_of_dhs[:, j], x_ji_vector)
 
                     # for each set of HIDDEN_UNITS # of weights going to the 10 outputs
                     for j, weights in enumerate(self.w_kh):
@@ -256,7 +258,7 @@ class NN():
                             else:
                                 x_ji_vector = batch_of_xks[:, i]
                             # Update the 5 weights for each output unit, then update all 5 for the next one, etc.
-                            weights[i] = weights[i] + self.delta_w(batch_of_dks[:, j], x_ji_vector)
+                            weights[i] = weights[i] + self.delta_wk(batch_of_dks[:, j], x_ji_vector)
 
                     # Clear the contents of these matrices so they're ready for the next mini-batch
                     batch_of_xhs = []
@@ -281,9 +283,17 @@ class NN():
         o_h_vector = self.get_h_layer_output(x)
         return self.get_k_layer_output(o_h_vector)
 
-    def delta_w(self, delta_j_vector, xji_vector):
-        self.delta_w_hn = delta_j_vector * xji_vector
-        return LRN_RATE * delta_j_vector.dot(xji_vector)
+    def delta_wh(self, delta_j_vector, xji_vector):
+        # Calculate momentum term using previously derived delta_w
+        momentum = ALPHA * self.d_wh
+        self.d_wh =  H_LRN_RATE * delta_j_vector.dot(xji_vector) + momentum
+        return self.d_wh
+
+    def delta_wk(self, delta_j_vector, xji_vector):
+        # Calculate momentum term using previously derived delta_w
+        momentum = ALPHA * self.d_wk
+        self.d_wK =  K_LRN_RATE * delta_j_vector.dot(xji_vector) + momentum
+        return self.d_wK
 
     def delta_k(self, o_k: float, t_k: int) -> float:
         return o_k * (1 - o_k) * (t_k - o_k)
