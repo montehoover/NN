@@ -12,11 +12,11 @@ LRN_RATE = 0.1
 MINI_BATCH = 10
 EPOCHS = 1
 
-PICKLE = "nn5.pickle"
+PICKLE = "nn4.pickle"
 
 
 def main():
-    train_nn()
+    # train_nn()
     test_nn()
 
 
@@ -47,7 +47,7 @@ def train_nn():
     nn.backprop(images, labels)
     with open(PICKLE, 'wb') as f:
         pickle.dump(nn, f)
-    print("Finished training in {} seconds".format(time.time() - start))
+    print("Finished training in {:.2f} seconds".format(time.time() - start))
 
 
 def test_nn():
@@ -78,10 +78,12 @@ def test_nn():
         if labels_as_ints[i] != nn.classify(images[i]):
             errors += 1
 
-    a = squared_loss()
-    # b = oh_over_one_loss()
-    print(errors / num_images)
-    print("Finished testing in {} seconds".format(time.time() - start))
+    output_onehots = np.apply_along_axis(nn.get_output_vector, 1, images)
+    sq_loss = squared_loss_over_dataset(labels, output_onehots)
+    err = oh_over_one_loss()
+    print("{:.2f}".format(sl))
+    print("{:.2f}".format(errors / num_images))
+    print("Finished testing in {:.2f} seconds".format(time.time() - start))
 
 
 
@@ -89,34 +91,56 @@ def to_one_hot_vector(x: np.ndarray) -> np.ndarray:
     """
     Turn labels into one-hot vectors: Create empty matrix where each row is a one-hot vector of length DIGITS
     For each row, assign at the index of the label digit to 1. (I.e. if first label is 7, labels[0][7] = 1)
-    :param x: 1D np array
-    :return:  2d np array
+    :param x: 1D array of values
+    :return:  2D matrix where each row is a one-hot vector
     """
     one_hot = np.zeros((len(x), DIGITS), dtype=np.uint8)
     one_hot[np.arange(len(x)), x] = 1
     return one_hot
 
+def from_one_hot_vector(X: np.ndarray) -> np.ndarray:
+    """
+    :param X: 2D matrix where each row is a one-hot vector
+    :return: 1D array of values
+    """
+    classified_outputs = np.apply_along_axis(np.argmax, 1, X)
+    return classified_outputs
 
-def squared_loss(nn: object, test_images: np.ndarray, test_labels: np.ndarray) -> float:
-    """
-    :param nn:
-    :param test_images: 2D matrix of images x image features
-    :param test_labels: 2D matrix of labels x one-hot representation
-    """
-    return sum([single_squared_loss(nn, *i_l_tuple) for i_l_tuple in zip(test_images, test_labels)])
+def oh_over_one_loss(labels: np.ndarray, outputs: np.ndarray) -> float:
+    correct = 0
+    for label, output in zip (labels, outputs):
+        if label == output:
+            correct += 1
+    accuracy = correct / len(labels)
+    return 1 - accuracy
 
-def single_squared_loss(nn: object, image_v: np.ndarray, label_onehot: np.ndarray) -> float:
+
+
+# def squared_loss(nn: object, test_images: np.ndarray, test_labels: np.ndarray) -> float:
+#     """
+#     :param nn:
+#     :param test_images: 2D matrix of images x image features
+#     :param test_labels: 2D matrix of labels x one-hot representation
+#     """
+#     return sum([single_squared_loss(nn, *i_l_tuple) for i_l_tuple in zip(test_images, test_labels)])
+
+def squared_loss_over_dataset(A: np.ndarray, B: np.ndarray) -> float:
     """
-    Measurement of NN's classification of an image against a known label
-    :param nn:
-    :param image_v: 1D vector of image features (pixels or PCA, etc.)
-    :param label_onehot: 1D vector (one-hot) labeling matching the image
-    :return: Scalar value that is the Squared Loss for the single image
+    Sum of squared_losses over a series of vectors to compare, divided by two
+    :param A: 2D matrix where each row is a vector to compare
+    :param B: 2D matrix where each row is a vector to compare
+    :return: Sum of all squared losses computed over the rows, divided by two
     """
-    classified_onehot = nn.get_output(image_v)
-    differences = label_onehot - classified_onehot
-    squares = np.square(differences)
-    sum = np.sum(squares)
+    return sum([single_squared_loss(rowa, rowb) for rowa, rowb in zip(A,B)]) * 0.5
+
+def single_squared_loss(a: np.ndarray, b: np.ndarray) -> float:
+    """
+    Sum of squared differences of two vectors
+    :param a: 1D vector
+    :param b: 1D vector
+    :return: Scalar
+    """
+    sum = np.sum(np.square(a - b))
     return sum
 
 
@@ -208,11 +232,11 @@ class NN():
         :param x: 1D vector of input values (from a single image)
         :return: The NN's classification value of that image
         """
-        classified_onehot = self.get_output(x)
+        classified_onehot = self.get_output_vector(x)
         classified_digit = np.argmax(classified_onehot)
         return classified_digit
 
-    def get_output(self, x: np.ndarray) -> np.ndarray:
+    def get_output_vector(self, x: np.ndarray) -> np.ndarray:
         """
         :param x: 1D vector of input values (from a single image)
         :return: 1D vector (one-hot) of the NN's classification value of that image
