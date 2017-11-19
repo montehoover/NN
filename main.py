@@ -178,11 +178,14 @@ def sigmoid(x: float) -> float:
 
 class NN():
     def __init__(self, num_input: int, num_output: int, num_hidden: int):
-        rand_generator = np.random.RandomState(1)
+        rand_generator = np.random.RandomState()
         # Weights from network input to hidden layer units; each row in matrix corresponds to weights for a single unit
         self.w_hn = rand_generator.uniform(-0.05, 0.05, (num_hidden, num_input + 1))
         # Weights from hidden layer to output layer units; each row in matrix corresponds to weights for a single unit
         self.w_kh = rand_generator.uniform(-0.05, 0.05, (num_output, num_hidden + 1))
+        # storage of delta_w's for use in momentum
+        self.delta_w_hn = np.zeros(num_input + 1)
+        self.delta_w_kh = np.zeros(num_hidden + 1)
 
     def backprop(self, examples: np.ndarray, labels: np.ndarray) -> None:
         for y in range(EPOCHS):
@@ -277,6 +280,7 @@ class NN():
         return self.get_k_layer_output(o_h_vector)
 
     def delta_w(self, delta_j_vector, xji_vector):
+        self.delta_w_hn = delta_j_vector * xji_vector
         return LRN_RATE * delta_j_vector.dot(xji_vector)
 
     def delta_k(self, o_k: float, t_k: int) -> float:
