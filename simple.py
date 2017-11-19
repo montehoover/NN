@@ -4,14 +4,14 @@ import numpy as np
 import pickle
 import time
 
-DIGITS = 10
-HIDDEN_UNITS = 10
+DIGITS = 2
+HIDDEN_UNITS = 5
 LRN_RATE = 0.1
 # second lrnrate
 # gamma
 # alpha
-MINI_BATCH = 10
-EPOCHS = 5
+MINI_BATCH = 2
+EPOCHS = 900
 PICKLE = "nn9.pickle"
 
 
@@ -29,9 +29,14 @@ def main():
 def train_nn(nn=None):
     print("Starting training...")
     start = time.time()
-    labels_as_ints = get_labels('MNIST_PCA/train-labels.idx1-ubyte')
+    # labels_as_ints = get_labels('MNIST_PCA/train-labels.idx1-ubyte')
+    labels_as_ints = np.array([0, 0, 0, 1])
     labels = to_one_hot_vector(labels_as_ints)
-    images, num_components = get_images('MNIST_PCA/train-images-pca.idx2-double')
+    # images, num_components = get_images('MNIST_PCA/train-images-pca.idx2-double')
+    images, num_components = np.array([[0,0],[0,1],[1,0],[1,1]]), 2
+
+
+
 
     if not nn:
         nn = NN(num_components, DIGITS, HIDDEN_UNITS)
@@ -47,13 +52,18 @@ def test_nn():
     # print("Starting testing...")
     start = time.time()
 
-    train_labels_as_ints = get_labels('MNIST_PCA/train-labels.idx1-ubyte')
+    # train_labels_as_ints = get_labels('MNIST_PCA/train-labels.idx1-ubyte')
+    train_labels_as_ints = np.array([0, 0, 0, 1])
     train_labels = to_one_hot_vector(train_labels_as_ints)
-    train_images, num_components = get_images('MNIST_PCA/train-images-pca.idx2-double')
+    # train_images, num_components = get_images('MNIST_PCA/train-images-pca.idx2-double')
+    train_images, num_components = np.array([[0,0],[0,1],[1,0],[1,1]]), 2
 
-    test_labels_as_ints = get_labels('MNIST_PCA/t10k-labels.idx1-ubyte')
+
+    # test_labels_as_ints = get_labels('MNIST_PCA/t10k-labels.idx1-ubyte')
+    test_labels_as_ints = np.array([0, 0, 0, 1])
     test_labels = to_one_hot_vector(test_labels_as_ints)
-    test_images, num_components = get_images('MNIST_PCA/t10k-images-pca.idx2-double')
+    # test_images, num_components = get_images('MNIST_PCA/t10k-images-pca.idx2-double')
+    test_images, num_components = np.array([[0,0],[0,1],[1,0],[1,1]]), 2
 
 
     with open(PICKLE, 'rb') as f:
