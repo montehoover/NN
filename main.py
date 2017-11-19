@@ -8,7 +8,7 @@ DIGITS = 10
 HIDDEN_UNITS = 10
 H_LRN_RATE = 0.03
 K_LRN_RATE = 0.03
-ALPHA = 0.1
+ALPHA = 0.03
 # second lrnrate
 # gamma
 # alpha
@@ -19,11 +19,11 @@ PICKLE = "nn9.pickle"
 
 def main():
     nn = None
-    try:
-        with open(PICKLE, 'rb') as f:
-            nn = pickle.load(f)
-    except:
-        pass
+    # try:
+    #     with open(PICKLE, 'rb') as f:
+    #         nn = pickle.load(f)
+    # except:
+    #     pass
     train_nn(nn)
     # test_nn()
 
