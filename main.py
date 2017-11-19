@@ -26,14 +26,9 @@ def train_nn():
     with open('MNIST_PCA/train-labels.idx1-ubyte', 'rb') as f:
         magic_number = f.read(4)
         num_labels_bytes = f.read(4)
-        num_labels = struct.unpack('>i', num_labels_bytes)[0]
+        # num_labels = struct.unpack('>i', num_labels_bytes)[0]
         labels_as_ints = np.fromfile(f, dtype=np.uint8)
         labels = to_one_hot_vector(labels_as_ints)
-
-        # Turn labels into one-hot vectors: Create empty matrix where each row is a one-hot vector of length DIGITS
-        # For each row, assign at the index of the label digit to 1. (I.e. if first label is 7, labels[0][7] = 1)
-        # labels = np.zeros((num_labels, DIGITS), dtype=np.uint8)
-        # labels[np.arange(num_labels), labels_as_ints] = 1
 
     with open('MNIST_PCA/train-images-pca.idx2-double', 'rb') as f:
         magic_number = f.read(4)
@@ -56,7 +51,7 @@ def test_nn():
     with open('MNIST_PCA/t10k-labels.idx1-ubyte', 'rb') as f:
         magic_number = f.read(4)
         num_labels_bytes = f.read(4)
-        num_labels = struct.unpack('>i', num_labels_bytes)[0]
+        # num_labels = struct.unpack('>i', num_labels_bytes)[0]
         labels_as_ints = np.fromfile(f, dtype=np.uint8)
         labels = to_one_hot_vector(labels_as_ints)
 
@@ -71,18 +66,12 @@ def test_nn():
     with open(PICKLE, 'rb') as f:
         nn = pickle.load(f)
 
-    assert num_images == num_labels
-    errors = 0
-    for i in range(num_images):
-        # print(labels_as_ints[i], nn.classify(images[i]))
-        if labels_as_ints[i] != nn.classify(images[i]):
-            errors += 1
-
     output_onehots = np.apply_along_axis(nn.get_output_vector, 1, images)
     sq_loss = squared_loss_over_dataset(labels, output_onehots)
-    err = oh_over_one_loss()
-    print("{:.2f}".format(sl))
-    print("{:.2f}".format(errors / num_images))
+    output_ints = from_one_hot_vector(output_onehots)
+    err = oh_over_one_loss(labels_as_ints, output_ints)
+    print("{:.2f}".format(sq_loss))
+    print("{:.2f}".format(err))
     print("Finished testing in {:.2f} seconds".format(time.time() - start))
 
 
@@ -98,15 +87,22 @@ def to_one_hot_vector(x: np.ndarray) -> np.ndarray:
     one_hot[np.arange(len(x)), x] = 1
     return one_hot
 
+
 def from_one_hot_vector(X: np.ndarray) -> np.ndarray:
     """
     :param X: 2D matrix where each row is a one-hot vector
     :return: 1D array of values
     """
-    classified_outputs = np.apply_along_axis(np.argmax, 1, X)
-    return classified_outputs
+    values = np.apply_along_axis(np.argmax, 1, X)
+    return values
+
 
 def oh_over_one_loss(labels: np.ndarray, outputs: np.ndarray) -> float:
+    """
+    :param labels: 1D array of integers representing labels for the image test set
+    :param outputs: 1D array of integers representing the NN's classifier outputs for the test set
+    :return: Percentage of images classified incorrectly (1 - accuracy)
+    """
     correct = 0
     for label, output in zip (labels, outputs):
         if label == output:
@@ -114,15 +110,6 @@ def oh_over_one_loss(labels: np.ndarray, outputs: np.ndarray) -> float:
     accuracy = correct / len(labels)
     return 1 - accuracy
 
-
-
-# def squared_loss(nn: object, test_images: np.ndarray, test_labels: np.ndarray) -> float:
-#     """
-#     :param nn:
-#     :param test_images: 2D matrix of images x image features
-#     :param test_labels: 2D matrix of labels x one-hot representation
-#     """
-#     return sum([single_squared_loss(nn, *i_l_tuple) for i_l_tuple in zip(test_images, test_labels)])
 
 def squared_loss_over_dataset(A: np.ndarray, B: np.ndarray) -> float:
     """
@@ -132,6 +119,7 @@ def squared_loss_over_dataset(A: np.ndarray, B: np.ndarray) -> float:
     :return: Sum of all squared losses computed over the rows, divided by two
     """
     return sum([single_squared_loss(rowa, rowb) for rowa, rowb in zip(A,B)]) * 0.5
+
 
 def single_squared_loss(a: np.ndarray, b: np.ndarray) -> float:
     """
@@ -227,14 +215,14 @@ class NN():
                     batch_of_dks = []
 
 
-    def classify(self, x: np.ndarray) -> int:
-        """
-        :param x: 1D vector of input values (from a single image)
-        :return: The NN's classification value of that image
-        """
-        classified_onehot = self.get_output_vector(x)
-        classified_digit = np.argmax(classified_onehot)
-        return classified_digit
+    # def classify(self, x: np.ndarray) -> int:
+    #     """
+    #     :param x: 1D vector of input values (from a single image)
+    #     :return: The NN's classification value of that image
+    #     """
+    #     classified_onehot = self.get_output_vector(x)
+    #     classified_digit = np.argmax(classified_onehot)
+    #     return classified_digit
 
     def get_output_vector(self, x: np.ndarray) -> np.ndarray:
         """
