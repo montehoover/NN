@@ -5,16 +5,17 @@ import pickle
 import time
 
 DIGITS = 10
-HIDDEN_UNITS = 10
-H_LRN_RATE = 0.03
-K_LRN_RATE = 0.03
-ALPHA = 0.03
-# second lrnrate
-# gamma
-# alpha
-MINI_BATCH = 10
-EPOCHS = 5
-PICKLE = "nn9.pickle"
+HIDDEN_UNITS = 1000
+MINI_BATCH = 1000
+EPOCHS = 60
+LRN_RATE = 0.001
+ALPHA = 0.003
+# GAMMA = 0.03
+PICKLE = "nn1000-1000.pickle"
+RELU = False
+
+# ERR_RATIO = 1.04
+
 
 
 def main():
@@ -37,6 +38,13 @@ def train_nn(nn=None):
 
     if not nn:
         nn = NN(num_components, DIGITS, HIDDEN_UNITS)
+
+    # Print initial squared error
+    with open("log.txt", 'a') as f:
+        f.write("\n{}-{}, Init:\n".format(HIDDEN_UNITS, MINI_BATCH))
+        print("\n{}-{}, Init:\n".format(HIDDEN_UNITS, MINI_BATCH), end='')
+    test_nn(nn)
+
     nn.backprop(images, labels)
 
     with open(PICKLE, 'wb') as f:
@@ -45,7 +53,7 @@ def train_nn(nn=None):
     print("Finished training in {:.2f} seconds".format(time.time() - start))
 
 
-def test_nn():
+def test_nn(nn):
     # print("Starting testing...")
     start = time.time()
 
@@ -58,8 +66,8 @@ def test_nn():
     test_images, num_components = get_images('MNIST_PCA/t10k-images-pca.idx2-double')
 
 
-    with open(PICKLE, 'rb') as f:
-        nn = pickle.load(f)
+    # with open(PICKLE, 'rb') as f:
+    #     nn = pickle.load(f)
 
 
     train_output_onehots = np.apply_along_axis(nn.get_output_vector, 1, train_images)
@@ -204,9 +212,6 @@ class NN():
                 o_h_vector = self.get_h_layer_output(examples[z])
                 o_k_vector = self.get_k_layer_output(o_h_vector)
 
-                # if z % 1000 == 0:
-                #     print(z, o_k_vector)
-
                 # Propogate errors back
                 delta_ks = [self.delta_k(o_k, labels[z][i]) for i, o_k in enumerate(o_k_vector)]
                 # To calculate delta_h, we need vector of weights that go from that h-unit to each output unit
@@ -267,12 +272,12 @@ class NN():
                     batch_of_dks = []
 
                 if (z + 1) % (len(examples) / 2) == 0:
-                    with open(PICKLE, 'wb') as f:
-                        pickle.dump(self, f)
+                    # with open(PICKLE, 'wb') as f:
+                    #     pickle.dump(self, f)
                     with open("log.txt", 'a') as f:
                         f.write("\n{}-{}, Epoch {}, Image {}:\n".format(HIDDEN_UNITS, MINI_BATCH, y+1, z+1))
                         print("\n{}-{}, Epoch {}, Image {}:\n".format(HIDDEN_UNITS, MINI_BATCH, y+1, z+1), end='')
-                    test_nn()
+                    test_nn(self)
 
 
     def get_output_vector(self, x: np.ndarray) -> np.ndarray:
@@ -286,26 +291,41 @@ class NN():
     def delta_wh(self, delta_j_vector, xji_vector):
         # Calculate momentum term using previously derived delta_w
         momentum = ALPHA * self.d_wh
-        self.d_wh =  H_LRN_RATE * delta_j_vector.dot(xji_vector) + momentum
+        self.d_wh = LRN_RATE * delta_j_vector.dot(xji_vector) + momentum
         return self.d_wh
 
     def delta_wk(self, delta_j_vector, xji_vector):
         # Calculate momentum term using previously derived delta_w
         momentum = ALPHA * self.d_wk
-        self.d_wK =  K_LRN_RATE * delta_j_vector.dot(xji_vector) + momentum
+        self.d_wK = LRN_RATE * delta_j_vector.dot(xji_vector) + momentum
         return self.d_wK
 
     def delta_k(self, o_k: float, t_k: int) -> float:
-        return o_k * (1 - o_k) * (t_k - o_k)
+        if RELU:
+            if o_k > 0:
+                deriv = 1
+            else:
+                # d/dx of x == 0 is undefined, but we give assign it zero here
+                deriv = 0
+        # Sigmoid function
+        else:
+            deriv = o_k * (1 - o_k)
+        return deriv * (t_k - o_k)
 
     def delta_h(self, o_h: float, w_kh_vector: np.ndarray, delta_ks: np.ndarray) -> float:
         """
-        :param o_h:
         :param w_kh_vector: vector of all weights from single hidden unit to each output unit, k
-        :param delta_ks:
-        :return:
         """
-        return o_h * (1 - o_h) * w_kh_vector.dot(delta_ks)
+        if RELU:
+            if o_h > 0:
+                deriv = 1
+            else:
+                # d/dx of x == 0 is undefined, but we give assign it zero here
+                deriv = 0
+        # Sigmoid function
+        else:
+            deriv = o_h * (1 - o_h)
+        return deriv * w_kh_vector.dot(delta_ks)
 
     def get_h_layer_output(self, x: np.ndarray) -> np.ndarray:
         """
