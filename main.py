@@ -5,13 +5,13 @@ import pickle
 import time
 
 DIGITS = 10
-HIDDEN_UNITS = 1000
+HIDDEN_UNITS = 500
 MINI_BATCH = 1000
 EPOCHS = 60
-LRN_RATE = 0.001
+LRN_RATE = 0.0003
 ALPHA = 0.003
 # GAMMA = 0.03
-PICKLE = "nn1000-1000.pickle"
+PICKLE = "scratch.pickle"
 RELU = False
 
 # ERR_RATIO = 1.04
